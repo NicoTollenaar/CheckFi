@@ -17,8 +17,8 @@ contract CheckMinter is ERC721URIStorage {
     }
 
     address bank;
-    Counters.Counter private _tokenIds;
-    mapping(uint256 => Check) private _checks;
+    Counters.Counter public _tokenIds;
+    mapping(uint256 => Check) public _checks;
 
     modifier onlyBank {
         require(msg.sender == bank, "Address is not the bank address");
@@ -35,20 +35,31 @@ contract CheckMinter is ERC721URIStorage {
         _tokenIds.increment();
 
         uint256 newItemId = _tokenIds.current();
-        _safeMint(recipient, newItemId);
+        _safeMint(writer, newItemId);
         _setTokenURI(newItemId, tokenURI);
 
         // make a new Check object and then add it to the checks mapping
         Check memory newCheck = Check(writer, recipient, amount, true);
         _checks[newItemId] = newCheck;
-
         emit CheckWritten(writer, recipient, amount);
+    }
+
+    function endorseNewRecipient(uint tokenId, address newRecipient) public {
+        _checks[tokenId].recipient = newRecipient;
     }
 
     function isCheckSpendable(uint256 tokenId) public view returns (bool) {
         return _checks[tokenId].spendable;
     }
 
+    function getCheckAmount(uint256 tokenId) public view returns (uint) {
+        return _checks[tokenId].amount;
+    }
+
+    function getRecipient(uint256 tokenId) public view returns (address) {
+        return _checks[tokenId].recipient;
+
+    }
     event CheckCashed(address writer, address recipient, uint256 amount);
     function cashCheck(uint256 tokenId, address recipient, uint256 amount) external onlyBank {
         // While a recipient and amount has been passed, no money is explicitly being transfered
