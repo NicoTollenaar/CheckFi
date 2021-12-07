@@ -215,9 +215,8 @@ describe("Contracts", async function() {
       });
     });
 
-    describe("escrowContract.executeEscrow when approved amount equal to escrow amount", async function(){
+    describe("escrowContract.executeEscrow", async function(){
       let txExecute;
-      let escrow;
       let escrowBefore, escrowAfter;
       let checksInEscrow;
       before(async function(){
@@ -258,134 +257,6 @@ describe("Contracts", async function() {
         assert.equal(escrowAfter.status, "Executed");
       });
     });
-
-    describe("escrowContract.executeEscrow when approved amount less than escrow amount", async function(){
-      let txExecute;
-      let escrow;
-      let escrowBefore, escrowAfter;
-      let checksInEscrow;
-      let writeCheckReceipt, writeCheckEvent, eventArgs;
-      let checkId;
-      let approvedAmount = (escrowAmounts[1] / 5) * 3;
-      before(async function(){
-        const rawEscrow = await escrowContract.getEscrowProposal(1);
-        escrowBefore = parseRawProposal(rawEscrow);
-        const tx = await checkContract.connect(bankSigner).writeCheck(depositorSigner.address, escrowContract.address, escrowAmounts[1], "");
-        writeCheckReceipt = await tx.wait();
-        writeCheckEvent = writeCheckReceipt.events.filter((x)=> x.event === "Transfer");
-        checkId = parseInt(writeCheckEvent[0].args[2], 10);
-        console.log("WriteCheckEvent: ", checkId);
-        console.log("writeCheckArgs: ", eventArgs);
-        const tx1 = await checkContract.connect(depositorSigner).approve(escrowContract.address, checkId);
-        await tx1.wait();
-        const tx2 = await escrowContract.depositInEscrow(depositorSigner.address, checkId, 1);
-        await tx2.wait();
-        const rawEscrowBefore = await escrowContract.getEscrowProposal(1);
-        escrowBefore = parseRawProposal(rawEscrowBefore);
-        console.log("escrowBefore: ", escrowBefore);
-        const tx3 = await escrowContract.connect(arbiterSigner).executeEscrow(1, approvedAmount);
-        await tx3.wait();
-        const rawEscrowAfter = await escrowContract.getEscrowProposal(1);
-        escrowAfter = parseRawProposal(rawEscrowAfter);
-        console.log("escrowAfter: ", escrowAfter);
-        });
-
-      it("should should cash all checks in escrow", async function(){
-        // assert
-
-
-      });
-    });
-
-    
-
-
-  
-    
-    
-     
-  
-      
-
-  
-        // const tx2 = await checkContract.connect(depositorSigner).approve(escrowContract.address, checkId);
-        // await txApprove.wait();
-        // balanceDepositorBefore = await chainAccountContract.balanceOf(depositorSigner.address);
-        // balanceContractBefore = await chainAccountContract.balanceOf(escrowContract.address);
-        // const rawProposalBefore = await escrowContract.getEscrowProposal(0);
-        // escrowProposalBefore = parseRawProposal(rawProposalBefore);
-      
-
-
-      // it("should transfer the deposit to the escrowcontract", function(){
-      // });
-
-      // it("should add the deposited amount to the escrow struct", async function(){
-      // });
-
-      
-
-      // it("should emit a fully funded event", async function(){
-        // await expect(escrowContract.depositInEscrow(depositorSigner.address, 5, 0))
-        // .to.emit(escrowContract, 'FullyFunded')
-        // .withArgs(0, 10000);
-      // });
-
-      // it("should change the status of the escrow to fully funded", async function(){
-        // const rawProposal = await escrowContract.getEscrowProposal(0);
-        // const escrowProposal = parseRawProposal(rawProposal);
-        // assert.strictEqual(escrowProposal.status, "FullyFunded");
-      // });
-
-      // it("should reject further payments after escrow is fully funded", async function(){
-        // const tx = await chainAccountContract.moveFundsOnChain(depositorSigner.address, 50000);
-        // await tx.wait();
-        // const tx1 = await chainAccountContract.connect(depositorSigner).approve(escrowContract.address, 50000);
-        // await tx1.wait();
-        // await expect(escrowContract.depositInEscrow(depositorSigner.address, 50000, 0)).to.be.reverted
-      // });
-
-    // describe("escrowContract.executeEscrow", async function (){
-    //   let approvedAmount = (escrowAmounts[0]/2);
-    //   let remainder = escrowAmounts[0] - approvedAmount;
-    //   it("should transfer approved amount from escrow to beneficiary", async function(){
-    //     balanceContractBefore = await chainAccountContract.balanceOf(escrowContract.address);
-    //     balanceBeneficiaryBefore = await chainAccountContract.balanceOf(beneficiarySigner.address);
-    //     balanceDepositorBefore = await chainAccountContract.balanceOf(depositorSigner.address);
-    //     balanceContractBefore = await chainAccountContract.balanceOf(escrowContract.address);
-    //     const tx = await escrowContract.connect(arbiterSigner).executeEscrow(0, approvedAmount);
-    //     await tx.wait();
-    //     balanceContractAfter = await chainAccountContract.balanceOf(escrowContract.address);
-    //     balanceBeneficiaryAfter = await chainAccountContract.balanceOf(beneficiarySigner.address);
-    //     assert.equal(parseInt(balanceBeneficiaryBefore, 10) + approvedAmount, parseInt(balanceBeneficiaryAfter, 10));
-    //   });
-
-    //   it("should return remainder to depositor", async function(){
-    //     balanceDepositorAfter = await chainAccountContract.balanceOf(depositorSigner.address);
-    //     assert.equal(parseInt(balanceDepositorBefore, 10) + remainder, parseInt(balanceDepositorAfter, 10));
-    //   });
-
-    //   it("should have removed the total escrow amount from the escrow contract", async function(){
-    //     balanceContractAfter = await chainAccountContract.balanceOf(escrowContract.address);
-    //     assert.equal(parseInt(balanceContractBefore, 10) - escrowAmounts[0], parseInt(balanceContractAfter, 10));
-    //   });
-
-    //   it("should set the amount held in escrow to 0", async function(){
-    //     rawProposal = await escrowContract.getEscrowProposal(0);
-    //     escrowProposal = parseRawProposal(rawProposal);
-    //     assert.equal(escrowProposal.heldInDeposit, 0);
-    //   });
-
-    //   it("should set the status to Executed", async function(){
-    //     assert.strictEqual(escrowProposal.status, "Executed");
-    //   });
-
-    //   it("should emit an executed event", async function(){
-    //     await expect(escrowContract.connect(arbiterSigner).executeEscrow(1, escrowAmounts[1]))
-    //     .to.emit(escrowContract, "Executed").withArgs(1, escrowAmounts[1]);
-    //   })
-    // });
-    
   });
 });
 
