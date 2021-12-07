@@ -10,15 +10,10 @@ describe("Contracts", async function() {
   let balanceContractBefore, balanceContractAfter;
 
   before(async function() {
-    bankSigner = await ethers.getSigner(0); // bank is deployer
+    bankSigner = await ethers.getSigner(0);
     depositorSigner = await ethers.getSigner(1);
     beneficiarySigner = await ethers.getSigner(2); 
     arbiterSigner = await ethers.getSigner(3);
-
-    console.log ("bank: ", bankSigner.address);
-    console.log ("depositor: ", depositorSigner.address);
-    console.log ("beneficiary: ", beneficiarySigner.address);
-    console.log ("arbiter: ", arbiterSigner.address);
     
     const checkFactory = await ethers.getContractFactory("CheckMinter");
     checkContract = await checkFactory.deploy();
@@ -28,40 +23,17 @@ describe("Contracts", async function() {
     escrowContract = await escrowFactory.deploy(checkContract.address);
     await escrowContract.deployed();
 
-    console.log("checkContract address:", checkContract.address);
-    console.log("checkContract deployer: ", checkContract.signer.address);
-    console.log("escrowContract deployed to address:", escrowContract.address);
-    console.log("EscrowContract deployer: ", escrowContract.signer.address);
+    // console.log ("bank: ", bankSigner.address);
+    // console.log ("depositor: ", depositorSigner.address);
+    // console.log ("beneficiary: ", beneficiarySigner.address);
+    // console.log ("arbiter: ", arbiterSigner.address);
+    // console.log("checkContract address:", checkContract.address);
+    // console.log("checkContract deployer: ", checkContract.signer.address);
+    // console.log("escrowContract deployed to address:", escrowContract.address);
+    // console.log("EscrowContract deployer: ", escrowContract.signer.address);
   });
 
-  // describe("checkContract", async ()=>{
-  // let amount = 30000;
-
-  //   describe("checkContract.writeCheck", async function(){
-  //     it("should should write a new check", async function() {
-  //     });
-  //   });
-    
-  //   describe("checkContract.transfer", async function(){
-  //     before(async function() {
-       
-  //     });
-
-  //     it("should transfer the check to the indicated recipient", async function() {
-  //     });
-  //   });
-
-  //   describe("checkContract.cashCheck", async function(){
-  //     before(async function() {
-  //     });
-
-  //     it("should set the spendable status to false", async function() {
-  //     });
-  //   });
-  // });
-
   describe("escrowContract", async function(){
-    let escrowProposalBefore;
     let rawProposal;
     let escrowProposal;
     let proposals = [];
@@ -139,11 +111,12 @@ describe("Contracts", async function() {
       });
     });
 
-    describe("escrowContract.depositInEscrow", async function(){
-      let emittedArgs;
+    describe("escrowContract when depositing half of escrow amount", async function(){
       let checkId;
+      let depositedAmount = escrowAmounts[0] / 2;
+      let amountInEscrow;
       before(async function(){
-        const tx1 = await checkContract.connect(bankSigner).writeCheck(depositorSigner.address, escrowContract.address, escrowAmounts[0], "");
+        const tx1 = await checkContract.connect(bankSigner).writeCheck(depositorSigner.address, escrowContract.address, depositedAmount, "");
         const receipt = await tx1.wait();
         const result = receipt.events.filter((x) => {
           return x.event == "Transfer";
@@ -160,7 +133,7 @@ describe("Contracts", async function() {
         const depositEvent = receiptDeposit.events.filter((element)=>{
           return element.event === "DepositedInEscrow";
         });
-        emittedArgs = depositEvent[0].args;
+        const emittedArgs = depositEvent[0].args;
         assert.equal(parseInt(emittedArgs[0], 10), 0);
         assert.equal(parseInt(emittedArgs[1], 10), checkId);
       });
@@ -168,6 +141,165 @@ describe("Contracts", async function() {
       it("should have transferred the check to escrow", async function(){
         assert.equal(await checkContract.ownerOf(checkId), escrowContract.address);
       });
+
+      it("should have added the check to the spendable checks array in the escrow struct", async function(){
+        const rawProposal = await escrowContract.getEscrowProposal(0);
+        const escrowProposal = parseRawProposal(rawProposal);
+        const checksInEscrow = escrowProposal.spendableChecksInEscrow;
+        amountInEscrow = await escrowContract.amountInEscrow(0);
+        assert.equal(checksInEscrow.indexOf(checkId), 0);
+      });
+
+      it("should confirm that the amount in escrow is equal to the amount of the deposited check", async function(){
+        assert.equal(parseInt(amountInEscrow, 10), depositedAmount);
+      });
+
+      it("should reject checks that exceed the escrow amount", async function(){
+        const tx1 = await checkContract.connect(bankSigner).writeCheck(depositorSigner.address, escrowContract.address, depositedAmount * 2, "");
+        const receipt = await tx1.wait();
+        const result = receipt.events.filter((x) => {
+          return x.event == "Transfer";
+        });
+        const eventArgs = result[0].args;
+        const check2Id = parseInt(eventArgs[2], 10);
+        const tx2 = await checkContract.connect(depositorSigner).approve(escrowContract.address, check2Id);
+        await tx2.wait();
+        await expect(escrowContract.depositInEscrow(depositorSigner.address, check2Id, 0)).to.be.reverted;
+      });
+    });
+
+    describe("escrowContract when depositing check that statisfies escrow amount", async function(){
+      let check3Id;
+      let depositedAmount = escrowAmounts[0] / 2; // second half of escrow amount
+      let amountInEscrow;
+      let tx3Receipt;
+      before(async function(){
+        const tx1 = await checkContract.connect(bankSigner).writeCheck(depositorSigner.address, escrowContract.address, depositedAmount, "");
+        const receipt = await tx1.wait();
+        const result = receipt.events.filter((x) => {
+          return x.event == "Transfer";
+        });
+        const eventArgs = result[0].args;
+        check3Id = parseInt(eventArgs[2], 10);
+        const tx2 = await checkContract.connect(depositorSigner).approve(escrowContract.address, check3Id);
+        await tx2.wait();
+        const tx3 = await escrowContract.depositInEscrow(depositorSigner.address, check3Id, 0);
+        tx3Receipt = await tx3.wait();
+      });
+
+      it("should have added the check to the spendable checks array in the escrow struct", async function(){
+        const rawProposal = await escrowContract.getEscrowProposal(0);
+        const escrowProposal = parseRawProposal(rawProposal);
+        const checksInEscrow = escrowProposal.spendableChecksInEscrow;
+        amountInEscrow = await escrowContract.amountInEscrow(0);
+        assert.equal(checksInEscrow.indexOf(check3Id), 1);
+      });
+
+      it("should confirm that the total amount of the checks equals the escrow amount", async function(){
+        assert.equal(parseInt(amountInEscrow, 10), escrowAmounts[0]);
+      });
+
+      it("should emit a fully funded event", async function (){
+        const fullyFundedEvent = tx3Receipt.events.filter((element)=>{
+          return element.event === "FullyFunded";
+        });
+        const emittedArgs = fullyFundedEvent[0].args;
+        assert.equal(parseInt(emittedArgs[0], 10), 0);
+        assert.equal(parseInt(emittedArgs[1], 10), escrowAmounts[0]);
+      });
+
+      it("should set the status to FullyFunded", async function(){
+        const rawProposal = await escrowContract.getEscrowProposal(0);
+        const escrowProposal = parseRawProposal(rawProposal);
+        assert.equal(escrowProposal.status, "FullyFunded");
+      });
+    });
+
+    describe("escrowContract.executeEscrow when approved amount equal to escrow amount", async function(){
+      let txExecute;
+      let escrow;
+      let escrowBefore, escrowAfter;
+      let checksInEscrow;
+      before(async function(){
+        const rawProposal = await escrowContract.getEscrowProposal(0);
+        escrowBefore = parseRawProposal(rawProposal);
+        checksInEscrow = escrowBefore.spendableChecksInEscrow;
+        const tx = await escrowContract.connect(arbiterSigner).executeEscrow(0, escrowAmounts[0]);
+        txExecute = await tx.wait();
+      });
+
+      it("should endorse all checks and change recipient to beneficiary", async function(){
+        let rawCheck, check;
+        let recipient;
+        for (let i = 0; i < checksInEscrow.length; i++) {
+          rawCheck = await checkContract.getCheck(checksInEscrow[i]);
+          check = parseRawCheck(rawCheck);
+          recipient = check.recipient;
+          assert.strictEqual(recipient, beneficiarySigner.address);
+        }
+      });
+
+      it("should transfer all checks in escrow to beneficiary", async function(){
+        const rawProposal = await escrowContract.getEscrowProposal(0);
+        escrowAfter = parseRawProposal(rawProposal);
+        for (i = 1; i < checksInEscrow.length; i++) {
+          assert.equal(await checkContract.ownerOf(checksInEscrow[i]), beneficiarySigner.address);
+        }
+      });
+
+      it("should emit an Executed event", async function (){
+        const executeEvent = txExecute.events.filter((x)=> x.event === "Executed");
+        emittedArgs = executeEvent[0].args;
+        assert.equal(emittedArgs[0], 0);
+        assert.equal(emittedArgs[1], escrowAmounts[0]);
+      });
+
+      it("should change the status of the escrow to Executed", async function(){
+        assert.equal(escrowAfter.status, "Executed");
+      });
+    });
+
+    describe("escrowContract.executeEscrow when approved amount less than escrow amount", async function(){
+      let txExecute;
+      let escrow;
+      let escrowBefore, escrowAfter;
+      let checksInEscrow;
+      let writeCheckReceipt, writeCheckEvent, eventArgs;
+      let checkId;
+      let approvedAmount = (escrowAmounts[1] / 5) * 3;
+      before(async function(){
+        const rawEscrow = await escrowContract.getEscrowProposal(1);
+        escrowBefore = parseRawProposal(rawEscrow);
+        const tx = await checkContract.connect(bankSigner).writeCheck(depositorSigner.address, escrowContract.address, escrowAmounts[1], "");
+        writeCheckReceipt = await tx.wait();
+        writeCheckEvent = writeCheckReceipt.events.filter((x)=> x.event === "Transfer");
+        checkId = parseInt(writeCheckEvent[0].args[2], 10);
+        console.log("WriteCheckEvent: ", checkId);
+        console.log("writeCheckArgs: ", eventArgs);
+        const tx1 = await checkContract.connect(depositorSigner).approve(escrowContract.address, checkId);
+        await tx1.wait();
+        const tx2 = await escrowContract.depositInEscrow(depositorSigner.address, checkId, 1);
+        await tx2.wait();
+        const rawEscrowBefore = await escrowContract.getEscrowProposal(1);
+        escrowBefore = parseRawProposal(rawEscrowBefore);
+        console.log("escrowBefore: ", escrowBefore);
+        const tx3 = await escrowContract.connect(arbiterSigner).executeEscrow(1, approvedAmount);
+        await tx3.wait();
+        const rawEscrowAfter = await escrowContract.getEscrowProposal(1);
+        escrowAfter = parseRawProposal(rawEscrowAfter);
+        console.log("escrowAfter: ", escrowAfter);
+        });
+
+      it("should should cash all checks in escrow", async function(){
+        // assert
+
+
+      });
+    });
+
+    
+
+
   
     
     
@@ -253,7 +385,7 @@ describe("Contracts", async function() {
     //     .to.emit(escrowContract, "Executed").withArgs(1, escrowAmounts[1]);
     //   })
     // });
-    });
+    
   });
 });
 
@@ -269,9 +401,19 @@ function parseRawProposal(rawProposal) {
     beneficiary: rawProposal[2],
     arbiter: rawProposal[3],
     amount: parseInt(rawProposal[4], 10),
-    heldInDeposit: parseInt(rawProposal[5], 10),
+    spendableChecksInEscrow: rawProposal[5].map((e) => parseInt(e, 10)),
     Id: parseInt(rawProposal[6], 10),
     status: readableStatus,
   }
   return parsedProposal;
+}
+
+function parseRawCheck(rawCheck) {
+  const check = {
+    checkWriter : rawCheck[0],
+    recipient : rawCheck[1],
+    amount : parseInt(rawCheck[2], 10),
+    spendable : rawCheck[3]
+  }
+  return check;
 }

@@ -112,13 +112,13 @@ contract EscrowContract is ERC721Holder {
         return true;
     }
 
-    function amountInEscrow(uint escrowId) internal view returns (uint) {
+    function amountInEscrow(uint escrowId) public view returns (uint) {
         uint[] memory checksInEscrow = new uint[](escrowArray[escrowId].spendableChecksInEscrow.length);
         checksInEscrow = escrowArray[escrowId].spendableChecksInEscrow;
         uint totalAmount;
         for (uint i = 0; i < checksInEscrow.length; i++) {
-            if (checkMinter.isCheckSpendable(checksInEscrow[i]) == true) {
-                totalAmount += checkMinter.getCheckAmount(checksInEscrow[i]);
+            if (checkMinter.getCheck(checksInEscrow[i]).spendable == true) {
+                totalAmount += checkMinter.getCheck(checksInEscrow[i]).amount;
             }
         }
         return totalAmount;
@@ -126,12 +126,20 @@ contract EscrowContract is ERC721Holder {
 
     function transferChecksFromEscrow(uint escrowId, address _recipient) internal returns (bool) {
         uint[] memory checksInEscrow = new uint[](escrowArray[escrowId].spendableChecksInEscrow.length);
-        bool success;
         checksInEscrow = escrowArray[escrowId].spendableChecksInEscrow;
-        for (uint i = checksInEscrow.length - 1; i >= 0; i--) {
+        for (uint i = 0; i < checksInEscrow.length; i++) {
             checkMinter.endorseNewRecipient(checksInEscrow[i], _recipient);
             checkMinter.safeTransferFrom(address(this), _recipient, checksInEscrow[i]);
-            require(success, "transfer failed");
+            escrowArray[escrowId].spendableChecksInEscrow.pop();
+        }
+        return true;
+    }
+
+    function cashAllChecksInEscrow(uint escrowId) internal returns (bool) {
+        uint[] memory checksInEscrow = new uint[](escrowArray[escrowId].spendableChecksInEscrow.length);
+        checksInEscrow = escrowArray[escrowId].spendableChecksInEscrow;
+        for (uint i = 0; i < checksInEscrow.length; i++) {
+            checkMinter.cashCheck(checksInEscrow[i], address(this), checkMinter.getCheck(checksInEscrow[i]).amount);
             escrowArray[escrowId].spendableChecksInEscrow.pop();
         }
         return true;
@@ -140,7 +148,7 @@ contract EscrowContract is ERC721Holder {
     event DepositedInEscrow(uint indexed escrowId, uint indexed checkId);
     event FullyFunded(uint indexed escrowId, uint indexed escrowAmount);
     function depositInEscrow(address depositor, uint checkId, uint escrowId) public {
-        uint amount = checkMinter.getCheckAmount(checkId);
+        uint amount = checkMinter.getCheck(checkId).amount;
         require(escrowArray[escrowId].arbiter != address(0) && escrowArray[escrowId].beneficiary != address(0), "no address for beneficiary or arbiter");
         require(escrowArray[escrowId].status == EscrowStatus.Approved && 
         escrowArray[escrowId].status != EscrowStatus.FullyFunded, "Escrow not approved or already fully funded");
@@ -166,7 +174,14 @@ contract EscrowContract is ERC721Holder {
             bool success = transferChecksFromEscrow(escrowId, escrowArray[escrowId].beneficiary);
             require(success, "transfer failed");
         }
-        // if time remains, include scenario where approvedAmout < escrow amount
+        if (approvedAmount < amountInEscrow(escrowId)) {
+            bool success = transferChecksFromEscrow(escrowId, checkMinter.bank());
+            require(success, "transfer failed");
+            uint checkBeneficiary = checkMinter.writeCheck(address(this), escrowArray[escrowId].beneficiary, approvedAmount, "");
+            checkMinter.safeTransferFrom(address(this), escrowArray[escrowId].beneficiary, checkBeneficiary);
+            uint checkDepositor = checkMinter.writeCheck(address(this), escrowArray[escrowId].depositor, amountInEscrow(escrowId) - approvedAmount, "");
+            checkMinter.safeTransferFrom(address(this), escrowArray[escrowId].depositor, checkDepositor);
+        }
         escrowArray[escrowId].status = EscrowStatus.Executed;
         emit Executed(escrowId, approvedAmount);
 	}
