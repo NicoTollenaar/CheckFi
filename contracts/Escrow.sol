@@ -135,16 +135,6 @@ contract EscrowContract is ERC721Holder {
         return true;
     }
 
-    function cashAllChecksInEscrow(uint escrowId) internal returns (bool) {
-        uint[] memory checksInEscrow = new uint[](escrowArray[escrowId].spendableChecksInEscrow.length);
-        checksInEscrow = escrowArray[escrowId].spendableChecksInEscrow;
-        for (uint i = 0; i < checksInEscrow.length; i++) {
-            checkMinter.cashCheck(checksInEscrow[i], address(this), checkMinter.getCheck(checksInEscrow[i]).amount);
-            escrowArray[escrowId].spendableChecksInEscrow.pop();
-        }
-        return true;
-    }
-
     event DepositedInEscrow(uint indexed escrowId, uint indexed checkId);
     event FullyFunded(uint indexed escrowId, uint indexed escrowAmount);
     function depositInEscrow(address depositor, uint checkId, uint escrowId) public {
